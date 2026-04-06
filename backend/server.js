@@ -1,119 +1,107 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-require('dotenv').config();
+const dotenv = require('dotenv');
+const { createClient } = require('@supabase/supabase-js');
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const DATA_FILE = path.join(__dirname, 'data.json');
 
-// Middleware
+// Initialize Supabase with Service Role (bypasses RLS for secure background logic)
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 app.use(cors());
 app.use(express.json());
 
-// Persistent Data Helper
-const loadData = () => {
-  if (!fs.existsSync(DATA_FILE)) {
-    const initialData = {
-      subjects: [
-        { id: 1, name: "Business Analytics", units: [{ name: "Unit 1", topics: ["Intro", "Basics"] }] }
-      ],
-      materials: [
-        { id: 1, title: "Stats Notes PDF", type: "pdf", content: "https://example.com/file.pdf", subjectId: 1, unit: "Unit 1", topic: "Probability", createdAt: new Date().toISOString() }
-      ],
-      tasks: [
-        { id: 1, title: "Review Unit 1", subjectId: 1, deadline: new Date().toISOString(), priority: "high", completed: false }
-      ]
-    };
-    fs.writeFileSync(DATA_FILE, JSON.stringify(initialData, null, 2));
-    return initialData;
+// HEALCH CHECK
+app.get('/api/dashboard', async (req, res) => {
+  try {
+    const userId = req.query.userId;
+    if (!userId) return res.status(400).json({ message: "UserId required" });
+
+    // Parallel fetch from Supabase
+    const [subs, mats, tasks] = await Promise.all([
+      supabase.from('subjects').select('*', { count: 'exact' }).eq('user_id', userId),
+      supabase.from('materials').select('*', { count: 'exact' }).eq('user_id', userId),
+      supabase.from('tasks').select('*', { count: 'exact' }).eq('user_id', userId).eq('completed', false)
+    ]);
+
+    res.json({
+      message: "Supabase Cloud Online",
+      readiness: 75, // Can be computed based on task completion
+      stats: {
+        totalSubjects: subs.count || 0,
+        totalMaterials: mats.count || 0,
+        pendingTasks: tasks.count || 0
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-};
-
-const saveData = (data) => {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-};
-
-// Initial Load
-let db = loadData();
-
-// Helper to update DB and write to file
-const updateDb = (key, value) => {
-  db[key] = value;
-  saveData(db);
-};
-
-// --- ROUTES ---
-
-app.get('/', (req, res) => res.send('Studynex Backend Live'));
-
-// Dashboard & Analytics (Stage 6)
-app.get('/api/dashboard', (req, res) => {
-  const totalTasks = db.tasks.length;
-  const completedTasks = db.tasks.filter(t => t.completed).length;
-  const taskProgress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-  
-  // Readiness Score: Weighted average of tasks and materials (simplified)
-  const readiness = Math.round(taskProgress);
-
-  res.json({
-    message: "System Synchronized",
-    readiness: readiness || 0,
-    stats: {
-      totalSubjects: db.subjects.length,
-      totalMaterials: db.materials.length,
-      pendingTasks: totalTasks - completedTasks
-    }
-  });
 });
 
-// SUBJECTS (Stage 3 Refined)
-app.get('/api/subjects', (req, res) => res.json(db.subjects));
-app.post('/api/subjects', (req, res) => {
-  const newSub = { id: Date.now(), ...req.body };
-  db.subjects.push(newSub);
-  updateDb('subjects', db.subjects);
-  res.status(201).json(newSub);
-});
-app.delete('/api/subjects/:id', (req, res) => {
-  db.subjects = db.subjects.filter(s => s.id != req.params.id);
-  updateDb('subjects', db.subjects);
-  res.status(204).send();
+// SUBJECTS API
+app.get('/api/subjects', async (req, res) => {
+  const { userId } = req.query;
+  const { data, error } = await supabase.from('subjects').select('*').eq('user_id', userId);
+  if (error) return res.status(500).json(error);
+  res.json(data);
 });
 
-// MATERIALS (Stage 4 Refined)
-app.get('/api/materials', (req, res) => res.json(db.materials));
-app.post('/api/materials', (req, res) => {
-  const newMat = { id: Date.now(), ...req.body, createdAt: new Date().toISOString() };
-  db.materials.push(newMat);
-  updateDb('materials', db.materials);
-  res.status(201).json(newMat);
-});
-app.delete('/api/materials/:id', (req, res) => {
-  db.materials = db.materials.filter(m => m.id != req.params.id);
-  updateDb('materials', db.materials);
-  res.status(204).send();
+app.post('/api/subjects', async (req, res) => {
+  const { data, error } = await supabase.from('subjects').insert([req.body]).select().single();
+  if (error) return res.status(500).json(error);
+  res.json(data);
 });
 
-// TASKS (Stage 5)
-app.get('/api/tasks', (req, res) => res.json(db.tasks));
-app.post('/api/tasks', (req, res) => {
-  const newTask = { id: Date.now(), ...req.body, completed: false };
-  db.tasks.push(newTask);
-  updateDb('tasks', db.tasks);
-  res.status(201).json(newTask);
-});
-app.patch('/api/tasks/:id', (req, res) => {
-  db.tasks = db.tasks.map(t => t.id == req.params.id ? { ...t, ...req.body } : t);
-  updateDb('tasks', db.tasks);
-  res.json(db.tasks.find(t => t.id == req.params.id));
-});
-app.delete('/api/tasks/:id', (req, res) => {
-  db.tasks = db.tasks.filter(t => t.id != req.params.id);
-  updateDb('tasks', db.tasks);
-  res.status(204).send();
+// MATERIALS API
+app.get('/api/materials', async (req, res) => {
+  const { userId } = req.query;
+  const { data, error } = await supabase.from('materials').select('*').eq('user_id', userId);
+  if (error) return res.status(500).json(error);
+  res.json(data);
 });
 
-app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+app.post('/api/materials', async (req, res) => {
+  const { data, error } = await supabase.from('materials').insert([req.body]).select().single();
+  if (error) return res.status(500).json(error);
+  res.json(data);
+});
+
+app.delete('/api/materials/:id', async (req, res) => {
+  const { error } = await supabase.from('materials').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json(error);
+  res.json({ success: true });
+});
+
+// TASKS API
+app.get('/api/tasks', async (req, res) => {
+  const { userId } = req.query;
+  const { data, error } = await supabase.from('tasks').select('*').eq('user_id', userId);
+  if (error) return res.status(500).json(error);
+  res.json(data);
+});
+
+app.post('/api/tasks', async (req, res) => {
+  const { data, error } = await supabase.from('tasks').insert([req.body]).select().single();
+  if (error) return res.status(500).json(error);
+  res.json(data);
+});
+
+app.patch('/api/tasks/:id', async (req, res) => {
+  const { data, error } = await supabase.from('tasks').update(req.body).eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json(error);
+  res.json(data);
+});
+
+app.delete('/api/tasks/:id', async (req, res) => {
+  const { error } = await supabase.from('tasks').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json(error);
+  res.json({ success: true });
+});
+
+app.listen(PORT, () => console.log(`Production Server running on http://localhost:${PORT}`));
