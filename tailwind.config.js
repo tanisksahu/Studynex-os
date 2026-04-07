@@ -1,0 +1,68 @@
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,jsx,ts,tsx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        "tertiary-fixed-dim": "#ffb95f",
+        "on-primary-container": "#dad7ff",
+        "primary-fixed-dim": "#c3c0ff",
+        "on-surface": "#dae2fd",
+        "surface-container-high": "#222a3d",
+        "surface-variant": "#2d3449",
+        "on-tertiary": "#472a00",
+        "inverse-on-surface": "#283044",
+        "tertiary-fixed": "#ffddb8",
+        "error-container": "#93000a",
+        "secondary-fixed-dim": "#4edea3",
+        "on-tertiary-fixed": "#2a1700",
+        "on-error": "#690005",
+        "surface-container-lowest": "#060e20",
+        "inverse-primary": "#4d44e3",
+        "on-tertiary-container": "#ffd4a4",
+        "on-tertiary-fixed-variant": "#653e00",
+        "secondary-fixed": "#6ffbbe",
+        "surface-dim": "#0b1326",
+        "surface-container": "#171f33",
+        "inverse-surface": "#dae2fd",
+        "surface-container-highest": "#2d3449",
+        "outline-variant": "#464555",
+        "background": "#0b1326",
+        "error": "#ffb4ab",
+        "on-primary": "#1d00a5",
+        "on-primary-fixed": "#0f0069",
+        "on-secondary-fixed": "#002113",
+        "on-secondary-container": "#00311f",
+        "secondary-container": "#00a572",
+        "on-surface-variant": "#c7c4d8",
+        "primary-fixed": "#e2dfff",
+        "tertiary-container": "#ffb95f",
+        "on-background": "#dae2fd",
+        "primary-container": "#4f46e5",
+        "primary": "#c3c0ff",
+        "secondary": "#4edea3",
+        "outline": "#5f5d71",
+        "surface-container-low": "#151822",
+        "tertiary": "#ffb95f"
+      },
+      fontFamily: {
+        headline: ["Space Grotesk", "sans-serif"],
+        body: ["Inter", "sans-serif"],
+      },
+      animation: {
+        bounce: "bounce 1s infinite",
+      },
+      keyframes: {
+        bounce: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-10px)" },
+        },
+      },
+    },
+  },
+  darkMode: "class",
+  plugins: [],
+}
