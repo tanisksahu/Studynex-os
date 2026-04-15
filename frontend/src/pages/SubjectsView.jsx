@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 
 const SubjectsView = () => {
   const { 
-    subjects, rawSubjects, units, materials,
+    subjects, units, materials,
     toggleUnitCompletion, addSubject, removeSubject,
     addMaterialToUnit, updateUnitName, deleteMaterial
   } = useAppContext();
@@ -247,10 +247,10 @@ const OverviewTab = ({ sub, units, materials, updateUnitName }) => {
       // Regex: match lines starting with number/bullet/Unit/Chapter keywords
       const lines = syllabusText.split('\n').map(l => l.trim()).filter(Boolean);
       const extracted = lines
-        .filter(l => /^(unit|chapter|module|topic|\d+[\.\)])/i.test(l))
+        .filter(l => /^(unit|chapter|module|topic|\d+[.)])/i.test(l))
         .map((l, i) => ({
           unitNumber: i + 1,
-          name: l.replace(/^(unit|chapter|module|topic|\d+[\.\):\-\s]+)/i, '').trim() || `Unit ${i + 1}`
+          name: l.replace(/^(unit|chapter|module|topic|\d+[.):\-\s]+)/i, '').trim() || `Unit ${i + 1}`
         }))
         .slice(0, sub.totalUnits);
 
@@ -413,8 +413,20 @@ const UnitWorkspace = ({ sub, unitNumber, units, materials, toggleUnitCompletion
 
   const handleLinkSubmit = () => {
     if (!linkVal.trim()) return toast.error('Paste a valid URL');
-    const type = linkVal.includes('youtube') || linkVal.includes('youtu.be') ? 'youtube' : 'link';
-    const title = type === 'youtube' ? 'YouTube Reference' : new URL(linkVal.startsWith('http') ? linkVal : 'https://' + linkVal).hostname;
+    const normalizedUrl = linkVal.startsWith('http') ? linkVal : `https://${linkVal}`;
+    const type = normalizedUrl.includes('youtube') || normalizedUrl.includes('youtu.be') ? 'youtube' : 'link';
+    let title = 'Reference';
+
+    if (type === 'youtube') {
+      title = 'YouTube Reference';
+    } else {
+      try {
+        title = new URL(normalizedUrl).hostname;
+      } catch {
+        return toast.error('Invalid URL format');
+      }
+    }
+
     addMaterialToUnit(sub.id, unitNumber, { title, type, content: linkVal });
     setLinkVal('');
   };

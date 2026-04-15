@@ -144,6 +144,49 @@ const FloatingAssistant = () => {
   );
 };
 
+const AuthenticatedShell = () => {
+  const { isHydrating } = useAppContext();
+
+  if (isHydrating) {
+    return <PageLoader />;
+  }
+
+  return (
+    <>
+      <Toaster position="top-center" toastOptions={{
+          duration: 3000,
+          className: 'font-headline font-bold text-sm tracking-wide !bg-surface-container-high !text-white !border !border-outline-variant/20 !shadow-2xl'
+        }}
+      />
+      <Router>
+        <div className="flex min-h-screen text-on-surface relative">
+          <Sidebar />
+
+          {/* Main Content Wrapper - Adapts spacing on desktop, overlaps on mobile */}
+          <div className="flex-1 flex flex-col min-h-screen relative lg:pl-64 transition-all duration-300 w-full overflow-hidden">
+            <TopAppBar />
+
+            <div className="flex-1 w-full overflow-y-auto overflow-x-hidden pt-4 pb-20 lg:pb-4 relative z-0">
+               <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/" element={<Dashboard />} />
+                    <Route path="/inbox" element={<MaterialsInbox />} />
+                    <Route path="/plan" element={<Planner />} />
+                    <Route path="/exams" element={<SubjectsView />} />
+                    <Route path="/analytics" element={<Progress />} />
+                    <Route path="/profile" element={<Profile />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Routes>
+               </Suspense>
+            </div>
+            <FloatingAssistant />
+          </div>
+        </div>
+      </Router>
+    </>
+  );
+};
+
 function App() {
   const { user, loading } = useAuth();
 
@@ -165,36 +208,7 @@ function App() {
   return (
     <ErrorBoundary>
       <AppProvider>
-        <Toaster position="top-center" toastOptions={{ 
-            duration: 3000, 
-            className: 'font-headline font-bold text-sm tracking-wide !bg-surface-container-high !text-white !border !border-outline-variant/20 !shadow-2xl'
-          }} 
-        />
-        <Router>
-          <div className="flex min-h-screen text-on-surface relative">
-            <Sidebar />
-            
-            {/* Main Content Wrapper - Adapts spacing on desktop, overlaps on mobile */}
-            <div className="flex-1 flex flex-col min-h-screen relative lg:pl-64 transition-all duration-300 w-full overflow-hidden">
-              <TopAppBar />
-              
-              <div className="flex-1 w-full overflow-y-auto overflow-x-hidden pt-4 pb-20 lg:pb-4 relative z-0">
-                 <Suspense fallback={<PageLoader />}>
-                    <Routes>
-                      <Route path="/" element={<Dashboard />} />
-                      <Route path="/inbox" element={<MaterialsInbox />} />
-                      <Route path="/plan" element={<Planner />} />
-                      <Route path="/exams" element={<SubjectsView />} />
-                      <Route path="/analytics" element={<Progress />} />
-                      <Route path="/profile" element={<Profile />} />
-                      <Route path="/settings" element={<Settings />} />
-                    </Routes>
-                 </Suspense>
-              </div>
-              <FloatingAssistant />
-            </div>
-          </div>
-        </Router>
+        <AuthenticatedShell />
       </AppProvider>
     </ErrorBoundary>
   );

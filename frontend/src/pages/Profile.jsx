@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 const Profile = () => {
-  const { profile, setProfile, activityData } = useAppContext();
+  const { profile, setProfile } = useAppContext();
   const [isEditing, setIsEditing] = useState(false);
   const fileInputRef = useRef(null);
 

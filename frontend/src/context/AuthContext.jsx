@@ -33,7 +33,9 @@ export const AuthProvider = ({ children }) => {
             profile.xp || 0
           );
         } catch (err) {
-          console.error('Firestore profile sync failed:', err);
+          if (import.meta.env.DEV) {
+            console.error('Firestore profile sync failed:', err);
+          }
           // Fallback — app still works without Firestore
           setFirestoreProfile(null);
         }

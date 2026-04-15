@@ -2,13 +2,21 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
+function requireEnv(name) {
+  const value = import.meta.env[name];
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
 const firebaseConfig = {
-  apiKey: "AIzaSyDWZw43x-zNyvjX2JhJHaNscNcx6oDqbF8",
-  authDomain: "studynex-app.firebaseapp.com",
-  projectId: "studynex-app",
-  storageBucket: "studynex-app.firebasestorage.app",
-  messagingSenderId: "687518373435",
-  appId: "1:687518373435:web:e635aa6664e4393a616e1e"
+  apiKey: requireEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: requireEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: requireEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: requireEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requireEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requireEnv('VITE_FIREBASE_APP_ID')
 };
 
 const app = initializeApp(firebaseConfig);

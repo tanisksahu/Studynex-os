@@ -1,7 +1,14 @@
-import React, { createContext, useContext, useState, useMemo, useEffect } from 'react';
-import { useLocalStorage } from '../hooks/useLocalStorage';
+import React, { createContext, useContext, useState, useMemo, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { syncXpToFirestore, updateLeaderboard, logActivity } from '../services/firestoreService';
+import {
+  defaultAppState,
+  loadUserAppState,
+  saveUserAppState,
+  validateMaterialInput,
+  validateSubjectInput,
+  validateTaskInput,
+} from '../services/appStateService';
 import toast from 'react-hot-toast';
 
 const AppContext = createContext();
@@ -9,20 +16,127 @@ const AppContext = createContext();
 export const AppProvider = ({ children }) => {
   // Global Layout State
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isHydrating, setIsHydrating] = useState(true);
+  const hasHydratedRef = useRef(false);
 
   // Get real user from Firebase Auth
   const { user, firestoreProfile } = useAuth();
 
   // Settings & Gamification
-  const [settings, setSettings] = useLocalStorage('studynex-settings', {
-    theme: 'dark', dataPersistence: true, aiInjection: true, notifications: true, reminders: true,
-  });
+  const [settings, setSettings] = useState(defaultAppState.settings);
 
-  const [profile, setProfile] = useLocalStorage('studynex-profile', {
-    firstName: 'User', lastName: '', email: '', 
-    institution: '', xp: 0, level: 1, streak: 0, targetGpa: 3.9, studyTimeMinutes: 0,
-    avatarUrl: ''
-  });
+  const [profile, setProfile] = useState(defaultAppState.profile);
+  const [notifications, setNotifications] = useState(defaultAppState.notifications);
+  const [rawSubjects, setRawSubjects] = useState(defaultAppState.rawSubjects);
+  const [units, setUnits] = useState(defaultAppState.units);
+  const [masteryData, setMasteryData] = useState(defaultAppState.masteryData);
+  const [tasksRaw, setTasksRaw] = useState(defaultAppState.tasks);
+  const [materials, setMaterials] = useState(defaultAppState.materials);
+  const tasks = tasksRaw;
+
+  const setTasks = (updater) => {
+    setTasksRaw(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      if (!Array.isArray(next)) {
+        return prev;
+      }
+
+      return next
+        .map(task => {
+          const validated = validateTaskInput(task);
+          return validated.ok ? validated.value : null;
+        })
+        .filter(Boolean);
+    });
+  };
+
+  const resetUserData = () => {
+    setSettings(defaultAppState.settings);
+    setProfile(defaultAppState.profile);
+    setNotifications(defaultAppState.notifications);
+    setRawSubjects(defaultAppState.rawSubjects);
+    setUnits(defaultAppState.units);
+    setMasteryData(defaultAppState.masteryData);
+    setTasksRaw(defaultAppState.tasks);
+    setMaterials(defaultAppState.materials);
+  };
+
+  useEffect(() => {
+    let active = true;
+
+    const hydrate = async () => {
+      if (!user?.uid) {
+        hasHydratedRef.current = false;
+        resetUserData();
+        setIsHydrating(false);
+        return;
+      }
+
+      setIsHydrating(true);
+
+      try {
+        const state = await loadUserAppState(user.uid);
+        if (!active) return;
+
+        setSettings(state.settings);
+        setProfile(state.profile);
+        setNotifications(state.notifications);
+        setRawSubjects(state.rawSubjects);
+        setUnits(state.units);
+        setMasteryData(state.masteryData);
+        setTasksRaw(state.tasks);
+        setMaterials(state.materials);
+      } catch {
+        if (!active) return;
+        resetUserData();
+      } finally {
+        if (active) {
+          hasHydratedRef.current = true;
+          setIsHydrating(false);
+        }
+      }
+    };
+
+    hydrate();
+
+    return () => {
+      active = false;
+    };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid || !hasHydratedRef.current || isHydrating) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      saveUserAppState(user.uid, {
+        settings,
+        profile,
+        notifications,
+        rawSubjects,
+        units,
+        masteryData,
+        tasks: tasksRaw,
+        materials,
+      }).catch(() => {
+        // Keep UX responsive if a background save fails.
+      });
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [
+    user?.uid,
+    isHydrating,
+    settings,
+    profile,
+    notifications,
+    rawSubjects,
+    units,
+    masteryData,
+    tasksRaw,
+    materials,
+  ]);
 
   // Seed profile from Firebase user on login
   useEffect(() => {
@@ -58,12 +172,6 @@ export const AppProvider = ({ children }) => {
     });
   };
 
-  // NOTIFICATION SYSTEM
-  const [notifications, setNotifications] = useLocalStorage('studynex-notifications', [
-    { id: 1, type: 'alert', message: 'Exam for Data Structures in 30 Days', timestamp: new Date().toISOString(), read: false },
-    { id: 2, type: 'ai', message: 'AI Plan Available: Finish Microeconomics Unit 3', timestamp: new Date(Date.now() - 3600000).toISOString(), read: false }
-  ]);
-
   const markNotificationRead = (id) => {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   };
@@ -74,36 +182,6 @@ export const AppProvider = ({ children }) => {
   const clearNotifications = () => {
     setNotifications([]);
   };
-
-  // CLEAN RELATIONAL SCHEMA (Subjects -> Units)
-  const [rawSubjects, setRawSubjects] = useLocalStorage('studynex-v4-subjects', [
-    { id: 1, name: 'Data Structures', code: 'CS201', difficulty: 'Hard', examDate: '2026-05-15', totalUnits: 8 },
-    { id: 2, name: 'Microeconomics', code: 'ECON101', difficulty: 'Medium', examDate: '2026-06-01', totalUnits: 10 },
-    { id: 3, name: 'Systems Architecture', code: 'CS301', difficulty: 'Hard', examDate: '2026-05-20', totalUnits: 6 },
-    { id: 4, name: 'Linear Algebra', code: 'MATH200', difficulty: 'Medium', examDate: '2026-05-12', totalUnits: 5 }
-  ]);
-
-  const [units, setUnits] = useLocalStorage('studynex-v4-units', [
-    // Preload some completion states
-    { subjectId: 1, unitNumber: 1, completed: true },
-    { subjectId: 1, unitNumber: 2, completed: true },
-    { subjectId: 1, unitNumber: 3, completed: true },
-    { subjectId: 2, unitNumber: 1, completed: true },
-    { subjectId: 2, unitNumber: 2, completed: true },
-    { subjectId: 2, unitNumber: 3, completed: true },
-    { subjectId: 2, unitNumber: 4, completed: true },
-    { subjectId: 2, unitNumber: 5, completed: true },
-    { subjectId: 2, unitNumber: 6, completed: true },
-    { subjectId: 2, unitNumber: 7, completed: true },
-    { subjectId: 2, unitNumber: 8, completed: true }
-  ]);
-
-  const [masteryData, setMasteryData] = useLocalStorage('studynex-v5-mastery', [
-    { subjectId: 1, retention: 82, timeSpent: 300, level: 'Advanced' },
-    { subjectId: 2, retention: 95, timeSpent: 450, level: 'Expert' },
-    { subjectId: 3, retention: 64, timeSpent: 120, level: 'Beginner' },
-    { subjectId: 4, retention: 71, timeSpent: 180, level: 'Intermediate' }
-  ]);
 
   // Backward-Compatible Computed 'subjects' state
   const subjects = useMemo(() => {
@@ -125,22 +203,23 @@ export const AppProvider = ({ children }) => {
     }).sort((a,b) => new Date(a.examDate) - new Date(b.examDate));
   }, [rawSubjects, units, masteryData]);
 
-  const updateMastery = (subjectId, minutes) => {
-    setMasteryData(prev => prev.map(m => 
-      m.subjectId === subjectId ? { ...m, timeSpent: m.timeSpent + minutes, retention: Math.min(100, m.retention + (minutes/60)) } : m
-    ));
-    addXp(minutes * 2);
-  };
-
   const addSubject = (newSub) => {
+    const validated = validateSubjectInput(newSub);
+    if (!validated.ok) {
+      toast.error(validated.message, { style: { background: '#333', color: '#fff' }});
+      return false;
+    }
+
+    const normalized = validated.value;
+
     // Duplicate guard logic
-    if (rawSubjects.find(s => s.code.toLowerCase() === newSub.code.toLowerCase() || s.name.toLowerCase() === newSub.name.toLowerCase())) {
-       toast.error(`Course ${newSub.code} already exists!`, { style: { background: '#333', color: '#fff' }});
+    if (rawSubjects.find(s => s.code.toLowerCase() === normalized.code.toLowerCase() || s.name.toLowerCase() === normalized.name.toLowerCase())) {
+       toast.error(`Course ${normalized.code} already exists!`, { style: { background: '#333', color: '#fff' }});
        return false;
     }
     const createdSubjectId = Date.now();
-    setRawSubjects(prev => [...prev, { ...newSub, id: createdSubjectId }]);
-    toast.success(`${newSub.code} successfully registered!`, { style: { background: '#222', color: '#fff' }});
+    setRawSubjects(prev => [...prev, { ...normalized, id: createdSubjectId }]);
+    toast.success(`${normalized.code} successfully registered!`, { style: { background: '#222', color: '#fff' }});
     // Units actually don't NEED pre-generation in the units array until completed, but we can seed them
     return true;
   };
@@ -163,22 +242,19 @@ export const AppProvider = ({ children }) => {
     addXp(50);
   };
 
-  const [tasks, setTasks] = useLocalStorage('studynex-tasks', [
-    { id: 1, title: 'Review System Calls (Ch 4)', time: '09:00 AM', completed: true, isLive: false, priority: true },
-    { id: 2, title: 'Mock Exam: Microeconomics', time: '11:30 AM', completed: false, isLive: true, priority: true },
-  ]);
-
-  const [materials, setMaterials] = useLocalStorage('studynex-materials', [
-    { id: 101, title: 'Midterm Outline 2026', type: 'pdf', subject: 'Data Structures', unit: 'Unit 4', topic: 'Graphs', addedAt: new Date().toISOString(), confidence: 98 },
-  ]);
-
   const [activityData] = useState([
     { day: 'Mon', hours: 4 }, { day: 'Tue', hours: 2.5 }, { day: 'Wed', hours: 5 }, { day: 'Thu', hours: 3 }, { day: 'Fri', hours: 6 }, { day: 'Sat', hours: 2 }, { day: 'Sun', hours: 4.5 }
   ]);
 
   const addMaterial = (newMaterial) => {
+    const validated = validateMaterialInput(newMaterial);
+    if (!validated.ok) {
+      toast.error(validated.message);
+      return null;
+    }
+
     const material = {
-      ...newMaterial,
+      ...validated.value,
       id: Date.now(),
       addedAt: new Date().toISOString(),
       confidence: Math.floor(Math.random() * (99 - 80 + 1) + 80),
@@ -195,9 +271,15 @@ export const AppProvider = ({ children }) => {
 
   // Add material directly to a subject unit (bypasses inbox)
   const addMaterialToUnit = (subjectId, unitNumber, materialData) => {
+    const validated = validateMaterialInput(materialData);
+    if (!validated.ok) {
+      toast.error(validated.message);
+      return null;
+    }
+
     const sub = rawSubjects.find(s => s.id === subjectId);
     const newMat = {
-      ...materialData,
+      ...validated.value,
       id: Date.now(),
       subjectId,
       unitNumber,
@@ -217,12 +299,15 @@ export const AppProvider = ({ children }) => {
 
   // Update a unit's display name
   const updateUnitName = (subjectId, unitNumber, name) => {
+    const trimmed = (name || '').trim().slice(0, 80);
+    if (!trimmed) return;
+
     setUnits(prev => {
       const existing = prev.find(u => u.subjectId === subjectId && u.unitNumber === unitNumber);
       if (existing) {
-        return prev.map(u => u.subjectId === subjectId && u.unitNumber === unitNumber ? { ...u, name } : u);
+        return prev.map(u => u.subjectId === subjectId && u.unitNumber === unitNumber ? { ...u, name: trimmed } : u);
       }
-      return [...prev, { subjectId, unitNumber, completed: false, name }];
+      return [...prev, { subjectId, unitNumber, completed: false, name: trimmed }];
     });
   };
 
@@ -332,20 +417,45 @@ export const AppProvider = ({ children }) => {
     }
   };
 
+  const contextValue = useMemo(() => ({
+    isMobileMenuOpen, setIsMobileMenuOpen,
+    notifications, markNotificationRead, markAllNotificationsRead, clearNotifications,
+    subjects, rawSubjects, units, materials, tasks,
+    addSubject, removeSubject, deleteMaterial,
+    addMaterial, addMaterialToUnit, routeMaterialToUnit, updateUnitName, generateAiSuggestion,
+    toggleTask, setTasks,
+    toggleUnitCompletion,
+    dispatchAiAction, executeAction,
+    settings, updateSettings,
+    profile, setProfile, addXp,
+    isHydrating, resetUserData,
+    activityData,
+  }), [
+    isMobileMenuOpen,
+    notifications,
+    subjects,
+    rawSubjects,
+    units,
+    materials,
+    tasks,
+    settings,
+    profile,
+    isHydrating,
+    activityData,
+    addSubject,
+    addMaterial,
+    addMaterialToUnit,
+    routeMaterialToUnit,
+    generateAiSuggestion,
+    toggleTask,
+    toggleUnitCompletion,
+    dispatchAiAction,
+    executeAction,
+    addXp,
+  ]);
+
   return (
-    <AppContext.Provider value={{ 
-      isMobileMenuOpen, setIsMobileMenuOpen,
-      notifications, markNotificationRead, markAllNotificationsRead, clearNotifications,
-      subjects, rawSubjects, units, materials, tasks,
-      addSubject, removeSubject, deleteMaterial,
-      addMaterial, addMaterialToUnit, routeMaterialToUnit, updateUnitName, generateAiSuggestion,
-      toggleTask, setTasks,
-      toggleUnitCompletion,
-      dispatchAiAction, executeAction,
-      settings, updateSettings,
-      profile, setProfile, addXp,
-      activityData
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );

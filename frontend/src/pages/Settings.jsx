@@ -4,13 +4,13 @@ import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 
 const Settings = () => {
-  const { settings, updateSettings, setProfile, profile } = useAppContext();
+  const { settings, updateSettings, setProfile, profile, resetUserData } = useAppContext();
   const [activeTab, setActiveTab] = useState('general');
 
   const handleWipeData = () => {
      if(window.confirm("Are you sure? This will reset your profile XP and settings.")) {
-       localStorage.clear();
-       window.location.reload();
+       resetUserData();
+       toast.success('Cloud state reset complete', { style: { background: '#222', color: '#fff' }});
      }
   };
 

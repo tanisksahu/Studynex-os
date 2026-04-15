@@ -8,7 +8,7 @@ export const useLeaderboard = (max = 5) => {
   useEffect(() => {
     getLeaderboard(max)
       .then(data => setLeaders(data))
-      .catch(err => console.error('Leaderboard fetch failed:', err))
+      .catch(() => setLeaders([]))
       .finally(() => setLoading(false));
   }, [max]);
 

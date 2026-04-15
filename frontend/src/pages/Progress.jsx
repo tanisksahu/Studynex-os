@@ -6,7 +6,6 @@ import toast from 'react-hot-toast';
 const Progress = () => {
   const { subjects, materials, tasks, setTasks } = useAppContext();
 
-  const totalUnits = useMemo(() => subjects.reduce((acc, sub) => acc + sub.units, 0), [subjects]);
   const averageProgress = useMemo(() => subjects.length ? Math.round(subjects.reduce((acc, sub) => acc + sub.progress, 0) / subjects.length) : 0, [subjects]);
 
   const handleFixPlan = (subName) => {
